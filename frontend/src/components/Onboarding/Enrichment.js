@@ -1,0 +1,558 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Zap, Search, Loader2, Save, CheckCircle, AlertCircle, X, Plus } from "lucide-react";
+import axios from "axios";
+
+const API_BASE_URL = process.env.REACT_APP_API_DOMAIN;
+// ── Step indicator ────────────────────────────────────
+function StepIndicator({ step }) {
+    return (
+        <div className="d-flex align-items-center justify-content-center gap-2 mb-4">
+            <div className={`d-flex align-items-center justify-content-center rounded-circle fw-bold`}
+                style={{
+                    width: 32, height: 32,
+                    background: step >= 1 ? "#3b82f6" : "#e5e7eb",
+                    color: step >= 1 ? "#fff" : "#6b7280",
+                    fontSize: 14,
+                }}>
+                {step > 1 ? <CheckCircle size={16} /> : "1"}
+            </div>
+            <div style={{ width: 48, height: 2, background: step >= 2 ? "#3b82f6" : "#e5e7eb" }} />
+            <div className="d-flex align-items-center justify-content-center rounded-circle fw-bold"
+                style={{
+                    width: 32, height: 32,
+                    background: step >= 2 ? "#3b82f6" : "#e5e7eb",
+                    color: step >= 2 ? "#fff" : "#6b7280",
+                    fontSize: 14,
+                }}>
+                2
+            </div>
+            <div style={{ width: 48, height: 2, background: "#e5e7eb" }} />
+            <div className="d-flex align-items-center justify-content-center rounded-circle fw-bold"
+                style={{
+                    width: 32, height: 32,
+                    background: "#e5e7eb",
+                    color: "#6b7280",
+                    fontSize: 14,
+                }}>
+                3
+            </div>
+        </div>
+    );
+}
+
+export default function Enrichment() {
+    const navigate = useNavigate();
+
+    // ── Step 1: manual form ──
+    const [step, setStep] = useState(1);
+
+    const [form, setForm] = useState({
+        company_name:  "",
+        company_size:  "",
+        headquarters:  "",
+        type:          "",
+        founded:       "",
+        revenue_size:  "",
+        specialties:   "",
+    });
+    const [formErrors, setFormErrors] = useState({});
+
+    // ── Step 2: website + brands ──
+    const [websiteInput,  setWebsiteInput]  = useState("");
+    const [isEnriching,   setIsEnriching]   = useState(false);
+    const [enriched,      setEnriched]      = useState(false);
+    const [scrapedOk,     setScrapedOk]     = useState(false);
+    const [websiteUrl,    setWebsiteUrl]     = useState("");
+    const [brands,        setBrands]         = useState([]);  // array of strings
+    const [brandInput,    setBrandInput]     = useState("");
+    const [enrichError,   setEnrichError]   = useState("");
+
+    // ── Step 3: save ──
+    const [isSaving,  setIsSaving]  = useState(false);
+    const [saveError, setSaveError] = useState("");
+
+    // ─────────────────────────────────────────
+    const getUserId = () => {
+        try {
+            const user = JSON.parse(localStorage.getItem("user") || "{}");
+            const id   = parseInt(user.user_id);
+            return (!isNaN(id) && id > 0) ? id : null;
+        } catch { return null; }
+    };
+
+    // ── Step 1: Validate manual form ─────────
+    const validateForm = () => {
+        const e = {};
+        if (!form.company_name.trim())  e.company_name  = "Required";
+        if (!form.company_size.trim())  e.company_size  = "Required";
+        if (!form.headquarters.trim())  e.headquarters  = "Required";
+        if (!form.type.trim())          e.type          = "Required";
+        if (!form.revenue_size.trim())  e.revenue_size  = "Required";
+        setFormErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const handleNextStep = () => {
+        if (validateForm()) setStep(2);
+    };
+
+    // ── Step 2: Scrape website ────────────────
+    const handleEnrich = async () => {
+        if (!websiteInput.trim()) return;
+        setEnrichError("");
+        setScrapedOk(false);
+        setIsEnriching(true);
+        setEnriched(false);
+        setBrands([]);
+
+        try {
+            const res = await axios.post(`${API_BASE_URL}/onboarding/enrich`, {
+                website_url: websiteInput.trim(),
+                user_id:     getUserId() ?? 0,
+            });
+
+            const { scraped, message, data: d } = res.data;
+
+            setWebsiteUrl(d.website || websiteInput.trim());
+            setScrapedOk(scraped);
+
+            if (scraped && d.brands) {
+                // Convert comma string to array
+                const arr = d.brands
+                    .split(",")
+                    .map(b => b.trim())
+                    .filter(b => b.length > 0);
+                setBrands(arr);
+            }
+
+            if (!scraped && message) {
+                setEnrichError(message);
+            }
+
+            setEnriched(true);
+
+        } catch (err) {
+            setEnrichError(
+                err.response?.data?.detail ||
+                "Could not fetch website. You can add brands manually."
+            );
+            setWebsiteUrl(websiteInput.trim());
+            setEnriched(true);
+        } finally {
+            setIsEnriching(false);
+        }
+    };
+
+    // ── Brand tag helpers ─────────────────────
+    const addBrand = () => {
+        const b = brandInput.trim();
+        if (b && !brands.includes(b)) setBrands([...brands, b]);
+        setBrandInput("");
+    };
+
+    const removeBrand = (b) => setBrands(brands.filter(x => x !== b));
+
+    // ── Save everything ───────────────────────
+    const handleSave = async () => {
+        setSaveError("");
+
+        const userId = getUserId();
+        if (!userId) {
+            setSaveError("Session expired. Please register again.");
+            setTimeout(() => navigate("/Onboarding"), 2500);
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            await axios.post(`${API_BASE_URL}/onboarding/save-profile`, {
+                user_id:      userId,
+                company_name: form.company_name,
+                company_size: form.company_size,
+                headquarters: form.headquarters,
+                type:         form.type,
+                founded:      form.founded,
+                revenue_size: form.revenue_size,
+                specialties:  form.specialties,
+                website:      websiteUrl,
+                brands:       brands.join(", "),
+            });
+
+            // navigate("/Dashboard");
+             navigate("/Intelligence");
+
+        } catch (err) {
+            setSaveError(
+                err.response?.data?.detail ||
+                "Failed to save. Please try again."
+            );
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // ─────────────────────────────────────────
+    return (
+        <div className="min-vh-100 d-flex align-items-center justify-content-center p-4 bg-light">
+            <div style={{ width: "100%", maxWidth: "640px" }}>
+
+                {/* Logo */}
+                <div className="d-flex align-items-center justify-content-center gap-2 mb-3">
+                    <div
+                        className="rounded-3 bg-primary d-flex align-items-center justify-content-center"
+                        style={{ width: 40, height: 40 }}
+                    >
+                        <Zap size={20} className="text-white" />
+                    </div>
+                    <span className="fw-bold fs-5 text-dark">DELPHI AI</span>
+                </div>
+
+                {/* Step Indicator */}
+                <StepIndicator step={step} />
+
+                <div className="card shadow-lg border-0 rounded-4 p-4">
+
+                    {/* ══ STEP 1: Manual Form ══════════════════════ */}
+                    {step === 1 && (
+                        <>
+                            <div className="mb-4">
+                                <h4 className="fw-bold text-dark mb-1">
+                                    Company Details
+                                </h4>
+                                <p className="text-muted small mb-0">
+                                    Fill in your company information to get started.
+                                </p>
+                            </div>
+
+                            <div className="row g-3">
+
+                                <div className="col-12">
+                                    <label className="form-label fw-semibold small">
+                                        Company Name <span className="text-danger">*</span>
+                                    </label>
+                                    <input
+                                        className={`form-control ${formErrors.company_name ? "is-invalid" : ""}`}
+                                        placeholder="e.g. XTS World"
+                                        value={form.company_name}
+                                        onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                                    />
+                                    {formErrors.company_name && (
+                                        <div className="invalid-feedback">{formErrors.company_name}</div>
+                                    )}
+                                </div>
+
+                                <div className="col-md-6">
+                                    <label className="form-label fw-semibold small">
+                                        Company Size <span className="text-danger">*</span>
+                                    </label>
+                                    <select
+                                        className={`form-select ${formErrors.company_size ? "is-invalid" : ""}`}
+                                        value={form.company_size}
+                                        onChange={(e) => setForm({ ...form, company_size: e.target.value })}
+                                    >
+                                        <option value="">Select size</option>
+                                        <option>1–10 employees</option>
+                                        <option>11–50 employees</option>
+                                        <option>51–200 employees</option>
+                                        <option>201–500 employees</option>
+                                        <option>501–1000 employees</option>
+                                        <option>1001–5000 employees</option>
+                                        <option>5000+ employees</option>
+                                    </select>
+                                    {formErrors.company_size && (
+                                        <div className="invalid-feedback">{formErrors.company_size}</div>
+                                    )}
+                                </div>
+
+                                <div className="col-md-6">
+                                    <label className="form-label fw-semibold small">
+                                        Revenue Size <span className="text-danger">*</span>
+                                    </label>
+                                    <select
+                                        className={`form-select ${formErrors.revenue_size ? "is-invalid" : ""}`}
+                                        value={form.revenue_size}
+                                        onChange={(e) => setForm({ ...form, revenue_size: e.target.value })}
+                                    >
+                                        <option value="">Select revenue</option>
+                                        <option>Under $1M</option>
+                                        <option>$1M – $10M</option>
+                                        <option>$10M – $50M</option>
+                                        <option>$50M – $100M</option>
+                                        <option>$100M – $500M</option>
+                                        <option>$500M – $1B</option>
+                                        <option>Over $1B</option>
+                                    </select>
+                                    {formErrors.revenue_size && (
+                                        <div className="invalid-feedback">{formErrors.revenue_size}</div>
+                                    )}
+                                </div>
+
+                                <div className="col-md-6">
+                                    <label className="form-label fw-semibold small">
+                                        Headquarters <span className="text-danger">*</span>
+                                    </label>
+                                    <input
+                                        className={`form-control ${formErrors.headquarters ? "is-invalid" : ""}`}
+                                        placeholder="e.g. Pune, India"
+                                        value={form.headquarters}
+                                        onChange={(e) => setForm({ ...form, headquarters: e.target.value })}
+                                    />
+                                    {formErrors.headquarters && (
+                                        <div className="invalid-feedback">{formErrors.headquarters}</div>
+                                    )}
+                                </div>
+
+                                <div className="col-md-6">
+                                    <label className="form-label fw-semibold small">
+                                        Type <span className="text-danger">*</span>
+                                    </label>
+                                    <select
+                                        className={`form-select ${formErrors.type ? "is-invalid" : ""}`}
+                                        value={form.type}
+                                        onChange={(e) => setForm({ ...form, type: e.target.value })}
+                                    >
+                                        <option value="">Select type</option>
+                                        <option>Privately Held</option>
+                                        <option>Public Company</option>
+                                        <option>Self Employed</option>
+                                        <option>Government Agency</option>
+                                        <option>Nonprofit</option>
+                                        <option>Partnership</option>
+                                        <option>Sole Proprietorship</option>
+                                    </select>
+                                    {formErrors.type && (
+                                        <div className="invalid-feedback">{formErrors.type}</div>
+                                    )}
+                                </div>
+
+                                <div className="col-md-6">
+                                    <label className="form-label fw-semibold small">Founded</label>
+                                    <input
+                                        className="form-control"
+                                        placeholder="e.g. 2010"
+                                        value={form.founded}
+                                        onChange={(e) => setForm({ ...form, founded: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="col-12">
+                                    <label className="form-label fw-semibold small">Specialties</label>
+                                    <input
+                                        className="form-control"
+                                        placeholder="e.g. Healthcare, AI, SaaS"
+                                        value={form.specialties}
+                                        onChange={(e) => setForm({ ...form, specialties: e.target.value })}
+                                    />
+                                </div>
+
+                            </div>
+
+                            <button
+                                className="btn btn-primary w-100 fw-semibold mt-4"
+                                onClick={handleNextStep}
+                            >
+                                Next: Add Company Website →
+                            </button>
+                        </>
+                    )}
+
+                    {/* ══ STEP 2: Website + Brands ═════════════════ */}
+                    {step === 2 && (
+                        <>
+                            <div className="mb-4">
+                                <h4 className="fw-bold text-dark mb-1">
+                                    Detect Brands & Products
+                                </h4>
+                                <p className="text-muted small mb-0">
+                                    Enter your company website URL — we'll automatically
+                                    detect your brands, models and products.
+                                </p>
+                            </div>
+
+                            {/* Website Input */}
+                            <div className="d-flex gap-2 mb-3">
+                                <div className="input-group">
+                                    <span className="input-group-text bg-light">
+                                        <Search size={15} className="text-muted" />
+                                    </span>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="e.g. https://xtsworld.com/"
+                                        value={websiteInput}
+                                        onChange={(e) => setWebsiteInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleEnrich()}
+                                    />
+                                </div>
+                                <button
+                                    className="btn btn-primary px-4"
+                                    onClick={handleEnrich}
+                                    disabled={!websiteInput.trim() || isEnriching}
+                                    style={{ whiteSpace: "nowrap" }}
+                                >
+                                    {isEnriching ? "Detecting..." : "Detect"}
+                                </button>
+                            </div>
+
+                            {/* Loading */}
+                            {isEnriching && (
+                                <div className="text-center text-muted py-3">
+                                    <Loader2
+                                        size={26}
+                                        className="mb-2"
+                                        style={{ animation: "spin 1s linear infinite" }}
+                                    />
+                                    <p className="small mb-0">
+                                        Scanning website for brands & products...
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Success Banner */}
+                            {scrapedOk && enriched && !isEnriching && (
+                                <div className="alert alert-success py-2 small mb-3 d-flex align-items-center gap-2">
+                                    <CheckCircle size={15} />
+                                    Brands & products detected from website. Review and edit below.
+                                </div>
+                            )}
+
+                            {/* Warning */}
+                            {enrichError && (
+                                <div className="alert alert-warning py-2 small mb-3 d-flex align-items-start gap-2">
+                                    <AlertCircle size={15} className="mt-1 flex-shrink-0" />
+                                    <span>{enrichError} You can add brands manually below.</span>
+                                </div>
+                            )}
+
+                            {/* Brands section — show after detect clicked */}
+                            {enriched && !isEnriching && (
+                                <>
+                                    <div className="mb-3">
+                                        <label className="form-label fw-semibold small">
+                                            Brands / Models / Products
+                                            <span className="text-muted fw-normal ms-1">
+                                                (edit or add more)
+                                            </span>
+                                        </label>
+
+                                        {/* Brand Tags */}
+                                        <div className="d-flex flex-wrap gap-2 mb-2 p-2 border rounded"
+                                            style={{ minHeight: 48, background: "#f8fafc" }}>
+                                            {brands.length === 0 && (
+                                                <span className="text-muted small align-self-center">
+                                                    No brands detected — add manually below
+                                                </span>
+                                            )}
+                                            {brands.map((b) => (
+                                                <span
+                                                    key={b}
+                                                    className="badge d-flex align-items-center gap-1 px-2 py-1"
+                                                    style={{
+                                                        background: "#dbeafe",
+                                                        color: "#1d4ed8",
+                                                        fontSize: 12,
+                                                        fontWeight: 500,
+                                                    }}
+                                                >
+                                                    {b}
+                                                    <button
+                                                        className="btn p-0 border-0 bg-transparent ms-1"
+                                                        onClick={() => removeBrand(b)}
+                                                        style={{ lineHeight: 1 }}
+                                                    >
+                                                        <X size={11} color="#1d4ed8" />
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        {/* Add brand manually */}
+                                        <div className="input-group">
+                                            <input
+                                                className="form-control"
+                                                placeholder="Add brand/model manually e.g. Delphi AI"
+                                                value={brandInput}
+                                                onChange={(e) => setBrandInput(e.target.value)}
+                                                onKeyDown={(e) => e.key === "Enter" && addBrand()}
+                                            />
+                                            <button
+                                                className="btn btn-outline-primary d-flex align-items-center gap-1"
+                                                onClick={addBrand}
+                                            >
+                                                <Plus size={14} /> Add
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Save error */}
+                                    {saveError && (
+                                        <div className="alert alert-danger py-2 small mb-3">
+                                            {saveError}
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    <div className="d-flex gap-2 mt-3">
+                                        <button
+                                            className="btn btn-outline-secondary"
+                                            onClick={() => setStep(1)}
+                                        >
+                                            ← Back
+                                        </button>
+                                        <button
+                                            className="btn btn-primary flex-grow-1 fw-semibold"
+                                            onClick={handleSave}
+                                            disabled={isSaving}
+                                        >
+                                            {isSaving ? (
+                                                <span className="spinner-border spinner-border-sm me-2" />
+                                            ) : (
+                                                <Save size={15} className="me-2" />
+                                            )}
+                                            {isSaving ? "Saving..." : "Save & Go to Dashboard"}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* If not yet enriched — show save option to skip detection */}
+                            {!enriched && !isEnriching && (
+                                <div className="d-flex gap-2 mt-2">
+                                    <button
+                                        className="btn btn-outline-secondary"
+                                        onClick={() => setStep(1)}
+                                    >
+                                        ← Back
+                                    </button>
+                                    <button
+                                        className="btn btn-outline-primary flex-grow-1"
+                                        onClick={() => {
+                                            setWebsiteUrl(websiteInput.trim());
+                                            setEnriched(true);
+                                        }}
+                                        disabled={!websiteInput.trim()}
+                                    >
+                                        Skip detection, add brands manually →
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                </div>
+
+                {/* Skip entire enrichment */}
+                <div className="text-center mt-3">
+                    <button
+                        className="btn btn-link text-decoration-none small text-muted p-0"
+                        onClick={() => navigate("/Dashboard")}
+                    >
+                        Skip for now →
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    );
+}
