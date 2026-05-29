@@ -43,7 +43,7 @@ function Layout() {
       {!shouldHideLayout && <Header />}
 
       <div className="app-layout">
-        <div className="app-content">
+        <div className="flex-grow-1">
           <Routes>
 
             {/* PUBLIC */}

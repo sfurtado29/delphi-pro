@@ -107,8 +107,8 @@ User Input: {user_input}"""
 # Covers both product fields and targeting fields.
 FIELD_ALIASES: dict[str, str] = {
     # Product fields
-    "product description":  "product_description",
-    "product":              "product_description",
+    # "product description":  "product_description",
+    # "product":              "product_description",
     "product name":         "product_name",
     "name":                 "product_name",
     "usp":                  "product_usps",

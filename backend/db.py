@@ -47,18 +47,10 @@ dbconfig = {
     "raise_on_warnings": True,
     "autocommit": True,
     "ssl_disabled": True,
-    "connection_timeout": 10,
-    "auth_plugin": "mysql_native_password",
 }
 
-# a small connection pool with retry
-try:
-    connection_pool = pooling.MySQLConnectionPool(pool_name="mypool", pool_size=20, **dbconfig)
-    print("✅ MySQL connection pool created successfully")
-except Error as e:
-    print(f"❌ Failed to create connection pool: {e}")
-    print(f"DB_HOST: {DB_HOST}, DB_USER: {DB_USER}, DB_NAME: {DB_NAME}")
-    raise
+# a small connection pool
+connection_pool = pooling.MySQLConnectionPool(pool_name="mypool", pool_size=20, **dbconfig)
 
 def get_conn():
     try:

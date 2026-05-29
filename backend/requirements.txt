@@ -3,7 +3,7 @@ uvicorn
 python-dotenv
 cryptography
 pydantic[email]
-mysql-connector-python==8.0.33
+mysql-connector-python
 python-multipart
 httpx
 beautifulsoup4

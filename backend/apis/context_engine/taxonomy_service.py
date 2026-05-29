@@ -1,5 +1,7 @@
 # taxonomy_service.py
 from db import get_conn
+
+
 def fetch_column_values(query, params=None):
 
     conn = get_conn()
@@ -20,9 +22,10 @@ def fetch_column_values(query, params=None):
         conn.close()
 
 
-# -----------------------------
+# ─────────────────────────────────────────────────────────────
 # INDUSTRIES
-# -----------------------------
+# ─────────────────────────────────────────────────────────────
+
 def get_industries():
 
     query = """
@@ -30,44 +33,32 @@ def get_industries():
         FROM Mst_tblstandardindustry
         WHERE Isactive = 1
         ORDER BY Standard_industry_desc
-        Limit 5
+        LIMIT 50
     """
 
     return fetch_column_values(query)
 
 
-# -----------------------------
-# SECTORS (DOMAIN)
-# -----------------------------
-def get_industry_domains():
+# ─────────────────────────────────────────────────────────────
+# SECTORS / INDUSTRY DOMAIN
+#
+# The mst_industry_taxonomy table does not currently have a
+# 'sector' column in this environment.  industry_domain is
+# intentionally excluded from the active pipeline, so these
+# functions return an empty list rather than hitting the DB.
+# ─────────────────────────────────────────────────────────────
 
-    query = """
-        SELECT DISTINCT domain
-        FROM mst_industry_taxonomy
-        WHERE domain IS NOT NULL
-        ORDER BY domain
-    """
-
-    return fetch_column_values(query)
+def get_industry_domains() -> list:
+    return []
 
 
-# -----------------------------
-# SECTORS BY INDUSTRY (OPTIONAL FILTER)
-# -----------------------------
-def get_industry_domains_by_industry(industry):
+def get_industry_domains_by_industry(industry) -> list:
+    return []
 
-    query = """
-        SELECT DISTINCT domain
-        FROM mst_industry_taxonomy
-        WHERE industry = %s
-        AND domain IS NOT NULL
-        ORDER BY domain
-    """
 
-    return fetch_column_values(query, (industry,))
-# =========================================
+# ─────────────────────────────────────────────────────────────
 # JOB FUNCTIONS
-# =========================================
+# ─────────────────────────────────────────────────────────────
 
 def get_job_functions():
 
@@ -81,9 +72,9 @@ def get_job_functions():
     return fetch_column_values(query)
 
 
-# =========================================
+# ─────────────────────────────────────────────────────────────
 # JOB LEVELS
-# =========================================
+# ─────────────────────────────────────────────────────────────
 
 def get_job_levels():
 
@@ -97,41 +88,41 @@ def get_job_levels():
     return fetch_column_values(query)
 
 
-# =========================================
+# ─────────────────────────────────────────────────────────────
 # EMPLOYEE SIZES
-# =========================================
+# ─────────────────────────────────────────────────────────────
 
 def get_employee_sizes():
 
-     query = """
+    query = """
         SELECT DISTINCT Employee_size_desc
         FROM Mst_tblemployeesize
         WHERE Isactive = 1
         ORDER BY Employee_size_desc
     """
 
-     return fetch_column_values(query)
+    return fetch_column_values(query)
 
 
-# =========================================
+# ─────────────────────────────────────────────────────────────
 # REVENUE RANGES
-# =========================================
+# ─────────────────────────────────────────────────────────────
 
 def get_revenue_ranges():
 
-     query = """
+    query = """
         SELECT DISTINCT Revenue_size_desc
         FROM Mst_tblrevenuesize
         WHERE Isactive = 1
         ORDER BY Revenue_size_desc
     """
 
-     return fetch_column_values(query)
+    return fetch_column_values(query)
 
 
-# =========================================
+# ─────────────────────────────────────────────────────────────
 # GEOGRAPHY VALIDATION
-# =========================================
+# ─────────────────────────────────────────────────────────────
 
 def is_valid_geography(value):
 
@@ -139,24 +130,17 @@ def is_valid_geography(value):
     cursor = conn.cursor()
 
     try:
-
         query = """
             SELECT 1
             FROM Mst_tbllocationelements
             WHERE LOWER(Location_desc) = %s
-            LIMIT 5
+            LIMIT 1
         """
 
-        cursor.execute(
-            query,
-            (value.lower(),)
-        )
-
+        cursor.execute(query, (value.lower(),))
         result = cursor.fetchone()
-
         return result is not None
 
     finally:
-
         cursor.close()
         conn.close()

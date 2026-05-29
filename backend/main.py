@@ -28,6 +28,7 @@ from apis.Onboarding              import router as onboarding_router
 from apis.Intellegence.intellegece import router as intellegence_router
 from apis.context_engine.routes   import router as context_router
 
+from apis.campaign_suggest.campaign_routes import router as campaign_router
 load_dotenv()
 
 app = FastAPI()
@@ -35,8 +36,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:3001",
+        "http://localhost:3000",
         "http://localhost:8000",
         os.getenv("FRONTEND_URL", "http://localhost:3000"),
     ],
@@ -58,6 +58,8 @@ app.include_router(intellegence_router)
 
 
 app.include_router(context_router)
+
+app.include_router(campaign_router)
 
 @app.get("/health")
 def health():
