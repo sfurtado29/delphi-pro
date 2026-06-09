@@ -320,7 +320,47 @@ function LeadsTable({ rows }) {
   );
 }
 
-// ── Sidebar Panel ────────────────────────────────────────────────────────────
+// ── History Item with 3-dot menu ───────────────────────────────────────────
+function HistoryItem({ chat, isActive, onLoad, onStar, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div
+      className={`history-item ${isActive ? "active" : ""}`}
+      onClick={() => { onLoad(chat); setOpen(false); }}
+    >
+      <span className="history-item-title">{chat.title}</span>
+      <div className="hist-menu-wrap" ref={menuRef}>
+        <button
+          className="hist-dots-btn"
+          title="Options"
+          onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        >⋯</button>
+        {open && (
+          <div className="hist-dropdown">
+            <button className="hist-dd-item" onClick={e => { e.stopPropagation(); onStar(chat.id); setOpen(false); }}>
+              {chat.starred ? "★ Unstar" : "☆ Star"}
+            </button>
+            <button className="hist-dd-item danger" onClick={e => { e.stopPropagation(); onDelete(chat.id); setOpen(false); }}>
+              🗑 Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SidebarPanel({ title, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -413,7 +453,6 @@ export default function Intellegence() {
   const [chatHistory,   setChatHistory]   = useState([]);
   const [activeChatId,  setActiveChatId]  = useState(null);
   const [chatTitle,     setChatTitle]     = useState("");
-  const [isStarred,     setIsStarred]     = useState(false);
   const [sidebarOpen,   setSidebarOpen]   = useState(true);
   const [darkMode,      setDarkMode]      = useState(() => {
     return localStorage.getItem("delphi-theme") === "dark";
@@ -493,6 +532,14 @@ export default function Intellegence() {
     const finalText = (text || input).trim();
     if (!finalText || loading) return;
 
+    // Save to history immediately on first message of a new chat
+    if (messages.length === 0 && !activeChatId) {
+      const newId = Date.now();
+      const newChat = { id: newId, title: finalText.slice(0, 42), messages: [], context: {} };
+      setChatHistory(prev => [newChat, ...prev]);
+      setActiveChatId(newId);
+    }
+
     pushMessage({ role: "user", text: finalText });
     setInput("");
     setLoading(true);
@@ -548,9 +595,11 @@ export default function Intellegence() {
   };
 
   const startNewChat = async () => {
-    if (messages.length > 0) {
-      const title = messages.find(m => m.role === "user")?.text?.slice(0, 42) || "Chat";
-      setChatHistory(prev => [{ id: Date.now(), title, messages, context }, ...prev]);
+    if (messages.length > 0 && activeChatId) {
+      // update saved chat with latest messages
+      setChatHistory(prev => prev.map(c =>
+        c.id === activeChatId ? { ...c, messages, context } : c
+      ));
     }
     try {
       await fetch(`${API_BASE}/context/reset`, {
@@ -586,15 +635,6 @@ export default function Intellegence() {
 
       {/* ══ SIDEBAR ══════════════════════════════════════════════ */}
       <aside className="sidebar">
-
-        {/* Header */}
-        <div className="sidebar-header">
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarOpen(v => !v)}
-            title="Collapse sidebar"
-          >‹</button>
-        </div>
 
         {/* New chat */}
         <button className="new-chat-btn" onClick={startNewChat}>
@@ -643,17 +683,8 @@ export default function Intellegence() {
               <div className="history-section-label">⭐ Starred</div>
               <div className="history-list">
                 {chatHistory.filter(c => c.starred).map(chat => (
-                  <div
-                    key={chat.id}
-                    className={`history-item ${activeChatId === chat.id ? "active" : ""}`}
-                    onClick={() => loadChat(chat)}
-                  >
-                    <span className="history-item-title">{chat.title}</span>
-                    <span className="history-item-actions">
-                      <button className="hist-action-btn starred" title="Unstar" onClick={e => { e.stopPropagation(); toggleStarChat(chat.id); }}>⭐</button>
-                      <button className="hist-action-btn delete" title="Delete" onClick={e => { e.stopPropagation(); deleteChat(chat.id); }}>🗑</button>
-                    </span>
-                  </div>
+                  <HistoryItem key={chat.id} chat={chat} isActive={activeChatId === chat.id}
+                    onLoad={loadChat} onStar={toggleStarChat} onDelete={deleteChat} />
                 ))}
               </div>
             </div>
@@ -662,23 +693,9 @@ export default function Intellegence() {
           <div className="sidebar-history">
             <div className="history-section-label">History</div>
             <div className="history-list">
-              {messages.length > 0 && !activeChatId && (
-                <div className="history-item active">
-                  {messages.find(m => m.role === "user")?.text?.slice(0, 38) || "Current search"}
-                </div>
-              )}
               {chatHistory.filter(c => !c.starred).map(chat => (
-                <div
-                  key={chat.id}
-                  className={`history-item ${activeChatId === chat.id ? "active" : ""}`}
-                  onClick={() => loadChat(chat)}
-                >
-                  <span className="history-item-title">{chat.title}</span>
-                  <span className="history-item-actions">
-                    <button className="hist-action-btn" title="Star" onClick={e => { e.stopPropagation(); toggleStarChat(chat.id); }}>☆</button>
-                    <button className="hist-action-btn delete" title="Delete" onClick={e => { e.stopPropagation(); deleteChat(chat.id); }}>🗑</button>
-                  </span>
-                </div>
+                <HistoryItem key={chat.id} chat={chat} isActive={activeChatId === chat.id}
+                  onLoad={loadChat} onStar={toggleStarChat} onDelete={deleteChat} />
               ))}
               {chatHistory.length === 0 && messages.length === 0 && (
                 <p className="history-empty">Your searches will appear here</p>
@@ -690,11 +707,7 @@ export default function Intellegence() {
 
       {/* Collapsed toggle */}
       {!sidebarOpen && (
-        <button
-          className="sidebar-reopen"
-          onClick={() => setSidebarOpen(true)}
-          title="Open sidebar"
-        >›</button>
+        <button className="sidebar-reopen" onClick={() => setSidebarOpen(true)} title="Open sidebar">›</button>
       )}
 
       {/* ══ MAIN PANEL ═══════════════════════════════════════════ */}
@@ -712,10 +725,17 @@ export default function Intellegence() {
             <p className="delphi-hero-subtitle">Ask anything about leads, companies, competitors, market intelligence, or industry insights.</p>
 
             <div className="hero-cards">
-              <button className="hero-card" onClick={() => sendMessage("Find high intent leads in SaaS")}> <span>Find high intent leads in SaaS</span> <span className="card-arrow">→</span> </button>
-              <button className="hero-card" onClick={() => sendMessage("Analyze a company")}> <span>Analyze a company</span> <span className="card-arrow">→</span> </button>
-              <button className="hero-card" onClick={() => sendMessage("Monitor competitor activities")}> <span>Monitor competitor activities</span> <span className="card-arrow">→</span> </button>
-              <button className="hero-card" onClick={() => sendMessage("Latest market signals")}> <span>Latest market signals</span> <span className="card-arrow">→</span> </button>
+              <div className="hero-cards-row">
+                <button className="hero-card" onClick={() => sendMessage("Create Ideal Company Profile")}><span>Create Ideal Company Profile</span><span className="card-arrow">→</span></button>
+                <button className="hero-card" onClick={() => sendMessage("Uncover Personas")}><span>Uncover Personas</span><span className="card-arrow">→</span></button>
+                <button className="hero-card" onClick={() => sendMessage("Identify buyer groups")}><span>Identify buyer groups</span><span className="card-arrow">→</span></button>
+                <button className="hero-card" onClick={() => sendMessage("Geo-based personalization")}><span>Geo-based personalization</span><span className="card-arrow">→</span></button>
+              </div>
+              <div className="hero-cards-row">
+                <button className="hero-card" onClick={() => sendMessage("Create TAL")}><span>Create TAL</span><span className="card-arrow">→</span></button>
+                <button className="hero-card" onClick={() => sendMessage("Filter existing TAL to prioritize accounts")}><span>Filter existing TAL to prioritize accounts</span><span className="card-arrow">→</span></button>
+                <button className="hero-card" onClick={() => sendMessage("Uncover industries")}><span>Uncover industries</span><span className="card-arrow">→</span></button>
+              </div>
             </div>
           </div>
         )}
@@ -726,6 +746,9 @@ export default function Intellegence() {
             <div key={msg.id} className={`message-row ${msg.role}`}>
               {msg.role === "bot" && (
                 <div className="bot-avatar" title="Delphi AI">D</div>
+              )}
+              {msg.role === "user" && (
+                <div className="user-avatar" title={user.full_name || user.email || 'You'}>{userInitials}</div>
               )}
               <div className="message-content">
                 {msg.text && <div className="bubble">{msg.text}</div>}

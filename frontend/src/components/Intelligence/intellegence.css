@@ -144,21 +144,17 @@ body {
 .sidebar {
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
-  height: calc(100vh - 72px);
-  margin-top: 72px;
-
+  height: 100vh;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-mid);
-
   display: flex;
   flex-direction: column;
-  padding: 20px 14px 16px;
+  padding: 84px 14px 16px;
   gap: 10px;
   overflow: hidden;
-
+  z-index: 10;
   transition: transform var(--transition), background var(--transition), border-color var(--transition);
   will-change: transform;
-  z-index: 10;
 }
 
 .app-shell:not(.sidebar-open) .sidebar {
@@ -173,19 +169,6 @@ body {
   justify-content: space-between;
   padding-bottom: 6px;
   flex-shrink: 0;
-}
-
-.sidebar-brand {
-  font-family: var(--font-ui);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-pri);
-}
-
-.sidebar-brand span {
-  color: var(--accent);
 }
 
 .sidebar-toggle, .sidebar-reopen, .theme-toggle {
@@ -494,17 +477,33 @@ body {
 
 .hero-cards {
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
   margin-bottom: 18px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.hero-cards-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+}
+
+.hero-cards-row .hero-card {
+  flex: 1;
+  max-width: 220px;
+  min-width: 0;
 }
 
 .hero-card {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 14px 18px;
+  padding: 14px 28px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-pri);
@@ -516,7 +515,8 @@ body {
 }
 
 .hero-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-sm); }
-.hero-card .card-arrow { margin-left: auto; color: var(--text-dim); }
+.hero-card { position: relative; }
+.hero-card .card-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); }
 
 .hero-input-area {
   display: flex;
@@ -590,11 +590,43 @@ body {
 }
 
 .sidebar-bottom {
-  margin-top: auto;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
 }
+
+/* Highlight History header placed at bottom and empty-state */
+.sidebar-bottom .history-section-label {
+  display: block;
+  background: transparent; /* remove filled background */
+  color: var(--text-dim);
+  padding: 6px 8px;
+  border-radius: 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-size: 12px;
+}
+
+.sidebar-bottom .history-empty {
+  padding: 8px 10px;
+  background: transparent; /* keep empty text plain */
+  border-radius: 0;
+  color: var(--text-dim);
+  text-align: left;
+  font-weight: 500;
+}
+
+.sidebar-bottom .history-list .history-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.12s;
+  background: transparent; /* remove button-like bg */
+  border: none;
+}
+.sidebar-bottom .history-list .history-item:hover { background: var(--bg-hover); }
 
 .sidebar-history {
   display: flex;
@@ -602,7 +634,9 @@ body {
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
-  flex-shrink: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .sidebar-history + .sidebar-history {
@@ -610,13 +644,13 @@ body {
 }
 
 .history-section-label {
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 6px 4px 4px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-dim);
+  padding: 6px 4px 6px;
   flex-shrink: 0;
 }
 
@@ -625,25 +659,27 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-height: 140px;
-  max-height: 220px;
+  gap: 3px;
+  min-height: 0;
 }
 
 .history-list::-webkit-scrollbar { width: 3px; }
 .history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
 .history-item {
-  padding: 6px 8px;
+  padding: 9px 10px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-sec);
+  font-family: var(--font-body);
+  font-weight: 500;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
   border: 1px solid transparent;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .history-item-title {
@@ -654,26 +690,57 @@ body {
   min-width: 0;
 }
 
-.history-item-actions {
-  display: flex;
-  gap: 2px;
+.hist-menu-wrap {
+  position: relative;
   flex-shrink: 0;
 }
 
-.hist-action-btn {
+.hist-dots-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  opacity: 0.6;
-  transition: opacity var(--transition), background var(--transition);
+  font-size: 16px;
+  color: var(--text-dim);
+  padding: 0 3px;
   line-height: 1;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity var(--transition), background var(--transition);
 }
 
-.hist-action-btn:hover { opacity: 1; background: var(--border-soft); }
-.hist-action-btn.delete:hover { background: rgba(214,51,132,0.1); }
+.history-item:hover .hist-dots-btn { opacity: 1; }
+.hist-dots-btn:hover { background: var(--bg-hover); color: var(--text-pri); }
+
+.hist-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.hist-dd-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  color: var(--text-sec);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: background var(--transition), color var(--transition);
+}
+
+.hist-dd-item:hover { background: var(--bg-hover); color: var(--text-pri); }
+.hist-dd-item.danger { color: #e53e3e; }
+.hist-dd-item.danger:hover { background: rgba(229,62,62,0.08); color: #e53e3e; }
 
 .history-item:hover  { background: var(--bg-hover); color: var(--text-pri); }
 .history-item.active {
@@ -685,6 +752,7 @@ body {
 .history-empty {
   font-size: 12px;
   color: var(--text-muted);
+  font-family: var(--font-body);
   padding: 8px 10px;
   line-height: 1.6;
   font-style: italic;
@@ -747,8 +815,8 @@ body {
   position: relative;
   overflow: hidden;
   background: var(--bg);
-  height: calc(100vh - 72px);
-  margin-top: 72px;
+  height: 100vh;
+  padding-top: 72px;
   transition: background var(--transition);
 }
 
@@ -842,6 +910,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  align-items: center; /* center the conversation column */
 }
 
 .messages-area.no-scroll { overflow: hidden; }
@@ -857,8 +926,12 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 4px 24px;
+  padding: 4px 0;
   animation: msgIn 0.22s cubic-bezier(0.4,0,0.2,1) both;
+  width: 100%;
+  max-width: 980px; /* constrain row width so conversation is centered */
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 @keyframes msgIn {
@@ -888,11 +961,30 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* User avatar (initials) */
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--user-bg);
+  color: var(--user-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  letter-spacing: 0.04em;
+}
+
 .message-content {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: min(680px, 72%);
+  max-width: 780px; /* max bubble width */
+  width: 100%;
 }
 
 .message-row.user .message-content {
@@ -1019,6 +1111,8 @@ body {
 .input-zone {
   padding: 10px 24px 16px;
   flex-shrink: 0;
+  display: flex;
+  justify-content: center; /* center the input card */
 }
 
 .input-card {
@@ -1031,6 +1125,7 @@ body {
   padding: 10px 10px 10px 16px;
   box-shadow: var(--shadow-md);
   transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  width: min(1100px, 96%); /* slightly wider input card but not full width */
 }
 
 .input-card:focus-within {
