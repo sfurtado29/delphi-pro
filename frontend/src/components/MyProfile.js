@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "./MyProfile.css";
 
@@ -55,6 +55,17 @@ export default function MyProfile() {
   };
   const [brands, setBrands] = useState([]);
   const [brandInput, setBrandInput] = useState("");
+  const [scrapedProducts, setScrapedProducts] = useState([]);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [productInput, setProductInput] = useState("");
+
+  const userId = useMemo(() => user.user_id || user.id || null, [user]);
+
+  const API_HOST = (
+    process.env.REACT_APP_API_DOMAIN || process.env.REACT_APP_API_BASE || "http://127.0.0.1:8000"
+  ).replace(/\/$/, "");
 
   const stats = {
     campaigns: 0,
@@ -79,6 +90,107 @@ export default function MyProfile() {
     localStorage.setItem("user", JSON.stringify(updatedUser));
     setEditing(false);
   };
+
+  const addProductToBrands = useCallback((p) => {
+    if (!p || !p.label) return;
+    const label = p.label.trim();
+    if (!label) return;
+    setBrands(prev => (prev.includes(label) ? prev : [...prev, label]));
+  }, []);
+
+  const toggleSelectProduct = useCallback((p) => {
+    const label = p.label?.trim?.() || "";
+    if (!label) return;
+    setSelectedProducts(prev => (
+      prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]
+    ));
+  }, []);
+
+  const addCustomScrapedProduct = useCallback(() => {
+    const v = (productInput || "").trim();
+    if (!v) return;
+    const item = { label: v, type: 'custom' };
+    setScrapedProducts(prev => [item, ...prev]);
+    setProductInput('');
+    setSelectedProducts(prev => (prev.includes(v) ? prev : [v, ...prev]));
+  }, [productInput]);
+
+  const useSelectedAsICP = useCallback(() => {
+    if (!selectedProducts.length) {
+      alert('Please select one or more products first.');
+      return;
+    }
+
+    const url = `${API_HOST}/profile/${userId}/products`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products: selectedProducts, company_type: form.company || '' }),
+    })
+      .then(async (r) => {
+        const bodyText = await r.text().catch(() => "");
+        let body = {};
+        try { body = bodyText ? JSON.parse(bodyText) : {}; } catch { body = { raw: bodyText }; }
+        if (!r.ok) {
+          console.warn('Save ICP failed', { status: r.status, statusText: r.statusText, body });
+          alert(`Save failed: ${r.status} ${r.statusText}`);
+          return null;
+        }
+        return body;
+      })
+      .then((data) => {
+        if (!data) return;
+        if (data && data.success) {
+          // persist locally as well for immediate UX
+          localStorage.setItem('ideal_company_profile_products', JSON.stringify(selectedProducts));
+          setBrands(prev => {
+            const merged = [...prev];
+            selectedProducts.forEach(p => { if (!merged.includes(p)) merged.push(p); });
+            return merged;
+          });
+          alert('Selected products saved as Ideal Company Profile.');
+        } else {
+          console.warn('Save ICP returned unexpected body', data);
+          alert('Could not save to server. Check console.');
+        }
+      })
+      .catch(err => {
+        console.warn('Save ICP error', err);
+        alert('Network error saving selection.');
+      });
+  }, [selectedProducts]);
+
+  useEffect(() => {
+    if (!userId) { setProfileLoaded(true); return; }
+
+    const url = `${API_HOST}/campaign/profile`;
+    console.debug('[Profile] fetching', url, 'user_id=', userId);
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    })
+      .then((r) => {
+        if (!r.ok) {
+          console.warn('[Profile] fetch response not ok', r.status, r.statusText);
+          return r.text().then(t => ({ _raw: t }));
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        if (data.success) {
+          setScrapedProducts(data.all_products || []);
+          if (Array.isArray(data.brands) && data.brands.length) setBrands(data.brands);
+        } else {
+          console.warn('[Profile] backend returned no profile or success=false', data);
+        }
+      })
+      .catch((err) => console.warn('[Profile] fetch failed', err))
+      .finally(() => setProfileLoaded(true));
+  }, [userId]);
 
   const toggleDarkMode = (enabled) => {
     setDarkMode(enabled);
@@ -388,6 +500,63 @@ export default function MyProfile() {
                     )}
                 </div>
             </div>
+
+              {/* Scraped Products (from backend) */}
+              <div className="mp-card">
+                <div className="mp-card-title">
+                  <span className="mp-card-title-icon" style={{ background: "#fff7ed", color: "#b45309" }}>
+                    <i className="bi bi-cloud-download"></i>
+                  </span>
+                  Scraped Products
+                  <div style={{ marginLeft: 'auto', color: '#6b7280', fontSize: 13 }}>
+                    {profileLoaded ? `${scrapedProducts.length} found` : 'Loading...'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {!profileLoaded ? (
+                    <div style={{ color: '#6b7280' }}>Loading scraped products…</div>
+                  ) : scrapedProducts.length === 0 ? (
+                    <div style={{ color: '#6b7280' }}>No scraped products found for this company.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {scrapedProducts.map((p, i) => {
+                          const label = p.label || '';
+                          const selected = selectedProducts.includes(label);
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => toggleSelectProduct(p)}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: 999,
+                                border: selected ? '1px solid #7c3aed' : '1px solid rgba(0,0,0,0.08)',
+                                background: selected ? '#f3e8ff' : '#fff',
+                                cursor: 'pointer',
+                                fontSize: 13,
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        <input
+                          value={productInput}
+                          onChange={e => setProductInput(e.target.value)}
+                          placeholder="Or type a different product..."
+                          style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)' }}
+                        />
+                        <button className="mp-manage-btn" onClick={addCustomScrapedProduct}>+ Add</button>
+                        <button className="mp-manage-btn" onClick={useSelectedAsICP} style={{ background: '#7c3aed', color: '#fff' }}>Use Selected</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
 
         </div>
       </div>

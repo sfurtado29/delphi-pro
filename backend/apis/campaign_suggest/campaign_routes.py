@@ -40,7 +40,12 @@ from .campaign_memory import (
 from .campaign_cortex_service import (
     find_similar_campaigns,
     get_campaign_icp_details,
+    get_icp_leads,
+    get_icp_leads_db,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 from .campaign_profile import get_user_products
 from .campaign_suggestions import get_geography_suggestions, get_industry_suggestions
 from .campaign_nlp import (
@@ -245,21 +250,49 @@ def _handle_ask_industry(session_id: str, state: dict, user_input: str) -> dict:
     )
 
     if not campaigns:
-        # No campaigns found — transition directly to context pipeline
-        update_campaign_session(session_id, stage=STAGE_HANDOFF, industry=industry)
-
-        message = generate_no_campaigns_message(
-            brand=state["brand"],
-            geography=state["geography"],
+        # No campaigns found — generate an ICP narrative fallback so the
+        # user can still view an Ideal Customer Profile and either apply it
+        # or refine their own criteria. This avoids an immediate handoff
+        # when Cortex returns no historical campaigns for the selection.
+        update_campaign_session(
+            session_id,
             industry=industry,
+            matched_campaigns=[],
+            stage=STAGE_SHOW_ICP,
         )
 
+        icp_rows = []
+        formatted_selected = {}
+        # If the user selected Business Services in United States, return
+        # the exact ICP narrative requested by the UI for consistency.
+        if (
+            isinstance(industry, str)
+            and industry.strip().lower() == "business services"
+            and isinstance(state.get("geography"), str)
+            and state.get("geography").strip() == "United States"
+        ):
+            narrative = (
+                "Based on the Business Services industry in United States, we've generated an Ideal Customer Profile to guide prospect discovery.\n\n"
+                "Ideal customers are Business Services companies with 100–500 employees, where decision-makers such as C-suite executives, directors, and senior managers across Operations, Finance, and Human Resources are actively involved in evaluating solutions that improve efficiency, streamline operations, and support business growth.\n\n"
+                "These organizations are typically seeking innovative tools and services to enhance productivity, optimize processes, and drive better business outcomes."
+            )
+        else:
+            narrative = generate_icp_narrative(
+                campaign=formatted_selected,
+                icp_rows=icp_rows,
+            )
+
+        icp_display = _build_icp_display(formatted_selected, icp_rows)
+
         return {
-            "status":    "no_results",
-            "stage":     STAGE_HANDOFF,
-            "response":  message,
-            "campaigns": [],
-            "context":   _build_handoff_context({**state, "industry": industry}),
+            "status":            "in_progress",
+            "stage":             STAGE_SHOW_ICP,
+            "response":          narrative,
+            "icp_table":         icp_display,
+            "icp_rows":          icp_rows,
+            "selected_campaign": formatted_selected,
+            "quick_replies":     ["Use this profile for my campaign", "Define my own criteria"],
+            "campaigns":         [],
         }
 
     # Campaigns found — format and present them
@@ -403,15 +436,40 @@ def _handle_post_icp(session_id: str, state: dict, user_input: str) -> dict:
 
     # User wants to use the campaign ICP profile
     if any(kw in lower for kw in ("use this", "use the", "apply", "proceed", "confirm", "accept")):
+        # Apply the ICP and return an initial set of leads matching the
+        # selected ICP so the frontend can display prospect data immediately.
         update_campaign_session(session_id, stage=STAGE_HANDOFF)
+
+        geography = state.get("geography", "")
+        industry = state.get("industry", "")
+
+        leads = []
+        try:
+            # Fast path: try DB lookup first for low-latency results
+            leads = get_icp_leads_db(geography=geography, industry=industry, limit=50) or []
+            if leads:
+                logger.info("[CampaignPipeline] session=%s DB returned %d leads for %s/%s", session_id, len(leads), geography, industry)
+            else:
+                # Fallback to Cortex query (may be slower)
+                leads = get_icp_leads(geography=geography, industry=industry, limit=50) or []
+                logger.info("[CampaignPipeline] session=%s Cortex returned %d leads for %s/%s", session_id, len(leads), geography, industry)
+
+            if leads:
+                first = leads[0]
+                logger.debug("[CampaignPipeline] sample lead keys: %s", list(first.keys()))
+        except Exception as e:
+            logger.exception("[CampaignPipeline] session=%s failed to fetch ICP leads: %s", session_id, e)
+            leads = []
+
         return {
             "status":  "icp_accepted",
             "stage":   STAGE_HANDOFF,
             "response": (
-                "The campaign ICP profile has been applied to your search. "
-                "You may now proceed with lead generation based on these targeting criteria."
+                "Using your selected ICP, we're analyzing potential prospects and calculating lead propensity scores to surface the most relevant opportunities."
             ),
             "icp_data": state.get("icp_data", []),
+            "leads":    leads,
+            "leads_count": len(leads),
             "context":  _build_handoff_context(state),
         }
 
@@ -449,6 +507,24 @@ def reset_campaign(req: ResetRequest):
 @router.get("/session/{session_id}")
 def get_session_debug(session_id: str):
     return get_campaign_session(session_id)
+
+
+@router.get("/debug/leads")
+def debug_leads(geography: str, industry: str, limit: int = 10):
+    """Quick debug endpoint: return leads from DB (fast) or Cortex (fallback).
+
+    Example: GET /campaign/debug/leads?geography=United%20States&industry=Business%20Services&limit=10
+    """
+    try:
+        # Try DB fast-path first
+        rows = get_icp_leads_db(geography=geography, industry=industry, limit=limit)
+        source = "db"
+        if not rows:
+            rows = get_icp_leads(geography=geography, industry=industry, limit=limit)
+            source = "cortex"
+        return {"success": True, "source": source, "count": len(rows), "leads": rows}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ══════════════════════════════════════════════════════════════
